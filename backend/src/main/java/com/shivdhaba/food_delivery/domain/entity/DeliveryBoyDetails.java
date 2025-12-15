@@ -53,7 +53,7 @@ public class DeliveryBoyDetails {
     @Builder.Default
     private Integer totalDeliveries = 0;
     
-    @Column(name = "total_earnings", nullable = false, precision = 10, scale = 2)
+    @Column(name = "total_earnings", nullable = false, columnDefinition = "DECIMAL(10,2) DEFAULT 0.00")
     @Builder.Default
     private Double totalEarnings = 0.0;
     

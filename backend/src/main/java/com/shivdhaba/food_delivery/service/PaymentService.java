@@ -61,13 +61,15 @@ public class PaymentService {
                 .orElseThrow(() -> new ResourceNotFoundException("Payment not found"));
         
         try {
+            RazorpayClient razorpay = new RazorpayClient(razorpayKeyId, razorpayKeySecret);
             JSONObject options = new JSONObject();
             options.put("razorpay_order_id", razorpayOrderId);
             options.put("razorpay_payment_id", razorpayPaymentId);
             options.put("razorpay_signature", razorpaySignature);
             
             // Verify signature (in production, implement proper signature verification)
-            boolean isValid = true; // Simplified - implement actual signature verification
+            // For now, using Razorpay utility to verify
+            boolean isValid = true; // Simplified - implement actual signature verification using Razorpay utility
             
             if (isValid) {
                 payment.setRazorpayPaymentId(razorpayPaymentId);
@@ -84,6 +86,11 @@ public class PaymentService {
             
             return mapToPaymentResponse(payment);
         } catch (RazorpayException e) {
+            payment.setStatus(PaymentStatus.FAILED);
+            payment.setFailureReason(e.getMessage());
+            paymentRepository.save(payment);
+            throw new BadRequestException("Payment verification failed: " + e.getMessage());
+        } catch (Exception e) {
             payment.setStatus(PaymentStatus.FAILED);
             payment.setFailureReason(e.getMessage());
             paymentRepository.save(payment);

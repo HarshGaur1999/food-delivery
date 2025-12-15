@@ -6,25 +6,38 @@ import com.google.firebase.messaging.Message;
 import com.google.firebase.messaging.Notification;
 import com.shivdhaba.food_delivery.domain.entity.User;
 import com.shivdhaba.food_delivery.repository.UserRepository;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 
+import java.util.List;
+
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class NotificationService {
     
-    private final FirebaseMessaging firebaseMessaging;
     private final UserRepository userRepository;
+    private final FirebaseMessaging firebaseMessaging;
+    
+    @Autowired
+    public NotificationService(UserRepository userRepository, 
+                              @Autowired(required = false) FirebaseMessaging firebaseMessaging) {
+        this.userRepository = userRepository;
+        this.firebaseMessaging = firebaseMessaging;
+    }
     
     @Async
     public void sendNotification(String fcmToken, String title, String body) {
         if (fcmToken == null || fcmToken.isEmpty()) {
             log.warn("FCM token is null or empty, skipping notification");
+            return;
+        }
+        
+        if (firebaseMessaging == null) {
+            log.warn("Firebase not initialized, skipping notification");
             return;
         }
         
