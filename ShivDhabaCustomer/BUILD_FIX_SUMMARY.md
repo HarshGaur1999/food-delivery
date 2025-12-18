@@ -57,3 +57,8 @@ Or in one command:
 cd D:\food-delivery\ShivDhabaCustomer && cd android && .\gradlew clean && cd .. && npx react-native run-android
 ```
 
+
+
+
+
+

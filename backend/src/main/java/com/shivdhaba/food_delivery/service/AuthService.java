@@ -14,12 +14,9 @@ import com.shivdhaba.food_delivery.util.JwtUtil;
 import com.shivdhaba.food_delivery.util.OtpUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.concurrent.TimeUnit;
 
 @Service
 @RequiredArgsConstructor
@@ -29,7 +26,7 @@ public class AuthService {
     private final OtpUtil otpUtil;
     private final JwtUtil jwtUtil;
     private final PasswordEncoder passwordEncoder;
-    private final RedisTemplate<String, Object> redisTemplate;
+    private final OtpStorageService otpStorageService;
     
     @Value("${otp.expiration-minutes}")
     private int otpExpirationMinutes;
@@ -38,9 +35,8 @@ public class AuthService {
         String mobileNumber = request.getMobileNumber();
         String otp = otpUtil.generateOtp();
         
-        // Store OTP in Redis
-        String otpKey = "otp:" + mobileNumber;
-        redisTemplate.opsForValue().set(otpKey, otp, otpExpirationMinutes, TimeUnit.MINUTES);
+        // Store OTP using storage service (Redis or in-memory)
+        otpStorageService.storeOtp(mobileNumber, otp, otpExpirationMinutes);
         
         // In production, send OTP via SMS service
         // For now, we'll log it (remove in production)
@@ -57,16 +53,15 @@ public class AuthService {
         String mobileNumber = request.getMobileNumber();
         String otp = request.getOtp();
         
-        // Verify OTP from Redis
-        String otpKey = "otp:" + mobileNumber;
-        String storedOtp = (String) redisTemplate.opsForValue().get(otpKey);
+        // Verify OTP from storage service (Redis or in-memory)
+        String storedOtp = otpStorageService.getOtp(mobileNumber);
         
         if (storedOtp == null || !storedOtp.equals(otp)) {
             throw new UnauthorizedException("Invalid or expired OTP");
         }
         
         // Delete OTP after verification
-        redisTemplate.delete(otpKey);
+        otpStorageService.deleteOtp(mobileNumber);
         
         // Find or create user
         User user = userRepository.findByMobileNumberAndRole(mobileNumber, role)

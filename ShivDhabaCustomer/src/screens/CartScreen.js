@@ -34,13 +34,13 @@ const CartScreen = ({navigation}) => {
           <TouchableOpacity
             style={styles.quantityButton}
             onPress={() => dispatch(updateQuantity({itemId: item.id, quantity: item.quantity - 1}))}>
-            <Icon name="remove" size={20} color="#FF6B35" />
+            <Icon name="remove" size={24} color="#FF6B35" />
           </TouchableOpacity>
           <Text style={styles.quantity}>{item.quantity}</Text>
           <TouchableOpacity
             style={styles.quantityButton}
             onPress={() => dispatch(updateQuantity({itemId: item.id, quantity: item.quantity + 1}))}>
-            <Icon name="add" size={20} color="#FF6B35" />
+            <Icon name="add" size={24} color="#FF6B35" />
           </TouchableOpacity>
         </View>
       </View>
@@ -55,7 +55,7 @@ const CartScreen = ({navigation}) => {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Icon name="arrow-back" size={24} color="#FFF" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Cart</Text>
@@ -108,6 +108,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#FF6B35',
     elevation: 4,
   },
+  backButton: {
+    padding: 5,
+    marginLeft: -5,
+  },
   headerTitle: {
     fontSize: 20,
     fontWeight: 'bold',
@@ -149,7 +153,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   quantityButton: {
-    padding: 5,
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: '#F0F0F0',
+    minWidth: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   quantity: {
     fontSize: 16,
@@ -161,6 +170,7 @@ const styles = StyleSheet.create({
   removeButton: {
     padding: 10,
     justifyContent: 'center',
+    alignItems: 'center',
   },
   footer: {
     backgroundColor: '#FFF',

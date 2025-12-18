@@ -74,3 +74,8 @@ export const {addToCart, removeFromCart, updateQuantity, clearCart, loadCart} =
 export default cartSlice.reducer;
 
 
+
+
+
+
+

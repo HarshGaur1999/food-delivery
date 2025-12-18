@@ -71,3 +71,8 @@ echo $env:ANDROID_HOME
 - `npx react-native run-android` runs without SDK errors
 - App builds and installs on phone
 
+
+
+
+
+

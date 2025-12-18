@@ -201,6 +201,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     backgroundColor: '#F9F9F9',
     textAlignVertical: 'top',
+    color: '#000',
   },
   paymentOption: {
     flexDirection: 'row',

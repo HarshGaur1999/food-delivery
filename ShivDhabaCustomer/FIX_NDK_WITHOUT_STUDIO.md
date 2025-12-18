@@ -58,3 +58,8 @@ npx react-native run-android
 
 Gradle will download the correct NDK during the build process.
 
+
+
+
+
+
