@@ -3,6 +3,7 @@ package com.shivdhaba.food_delivery.service;
 import com.shivdhaba.food_delivery.domain.entity.User;
 import com.shivdhaba.food_delivery.domain.enums.Role;
 import com.shivdhaba.food_delivery.dto.request.AdminLoginRequest;
+import com.shivdhaba.food_delivery.dto.request.AdminRegisterRequest;
 import com.shivdhaba.food_delivery.dto.request.OtpRequest;
 import com.shivdhaba.food_delivery.dto.request.OtpVerifyRequest;
 import com.shivdhaba.food_delivery.dto.response.AuthResponse;
@@ -13,10 +14,18 @@ import com.shivdhaba.food_delivery.repository.UserRepository;
 import com.shivdhaba.food_delivery.util.JwtUtil;
 import com.shivdhaba.food_delivery.util.OtpUtil;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import jakarta.annotation.PreDestroy;
+
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 @Service
 @RequiredArgsConstructor
@@ -26,17 +35,48 @@ public class AuthService {
     private final OtpUtil otpUtil;
     private final JwtUtil jwtUtil;
     private final PasswordEncoder passwordEncoder;
-    private final OtpStorageService otpStorageService;
+    
+    // Redis is optional - use in-memory storage as fallback
+    @Autowired(required = false)
+    private RedisTemplate<String, Object> redisTemplate;
+    
+    // In-memory OTP storage as fallback when Redis is not available
+    private final ConcurrentHashMap<String, OtpEntry> inMemoryOtpStore = new ConcurrentHashMap<>();
+    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
     
     @Value("${otp.expiration-minutes}")
     private int otpExpirationMinutes;
+    
+    // Inner class for OTP storage with expiration
+    private static class OtpEntry {
+        final String otp;
+        final long expirationTime;
+        
+        OtpEntry(String otp, long expirationTime) {
+            this.otp = otp;
+            this.expirationTime = expirationTime;
+        }
+        
+        boolean isExpired() {
+            return System.currentTimeMillis() > expirationTime;
+        }
+    }
     
     public OtpResponse sendOtp(OtpRequest request) {
         String mobileNumber = request.getMobileNumber();
         String otp = otpUtil.generateOtp();
         
-        // Store OTP using storage service (Redis or in-memory)
-        otpStorageService.storeOtp(mobileNumber, otp, otpExpirationMinutes);
+        String otpKey = "otp:" + mobileNumber;
+        
+        // Use Redis if available, otherwise use in-memory storage
+        if (redisTemplate != null) {
+            redisTemplate.opsForValue().set(otpKey, otp, otpExpirationMinutes, TimeUnit.MINUTES);
+        } else {
+            long expirationTime = System.currentTimeMillis() + (otpExpirationMinutes * 60 * 1000L);
+            inMemoryOtpStore.put(otpKey, new OtpEntry(otp, expirationTime));
+            // Schedule cleanup
+            scheduler.schedule(() -> inMemoryOtpStore.remove(otpKey), otpExpirationMinutes, TimeUnit.MINUTES);
+        }
         
         // In production, send OTP via SMS service
         // For now, we'll log it (remove in production)
@@ -53,15 +93,26 @@ public class AuthService {
         String mobileNumber = request.getMobileNumber();
         String otp = request.getOtp();
         
-        // Verify OTP from storage service (Redis or in-memory)
-        String storedOtp = otpStorageService.getOtp(mobileNumber);
+        String otpKey = "otp:" + mobileNumber;
+        String storedOtp = null;
+        
+        // Get OTP from Redis or in-memory storage
+        if (redisTemplate != null) {
+            storedOtp = (String) redisTemplate.opsForValue().get(otpKey);
+            if (storedOtp != null) {
+                redisTemplate.delete(otpKey);
+            }
+        } else {
+            OtpEntry entry = inMemoryOtpStore.get(otpKey);
+            if (entry != null && !entry.isExpired()) {
+                storedOtp = entry.otp;
+                inMemoryOtpStore.remove(otpKey);
+            }
+        }
         
         if (storedOtp == null || !storedOtp.equals(otp)) {
             throw new UnauthorizedException("Invalid or expired OTP");
         }
-        
-        // Delete OTP after verification
-        otpStorageService.deleteOtp(mobileNumber);
         
         // Find or create user
         User user = userRepository.findByMobileNumberAndRole(mobileNumber, role)
@@ -96,6 +147,40 @@ public class AuthService {
                 .build();
     }
     
+    @Transactional
+    public AuthResponse createAdminUser(AdminRegisterRequest request) {
+        if (userRepository.findByMobileNumber(request.getMobileNumber()).isPresent()) {
+            throw new IllegalArgumentException("User with this mobile number already exists");
+        }
+
+        User adminUser = User.builder()
+                .mobileNumber(request.getMobileNumber())
+                .fullName(request.getFullName())
+                .email(request.getEmail())
+                .passwordHash(passwordEncoder.encode(request.getPassword()))
+                .role(Role.ADMIN)
+                .isActive(true)
+                .build();
+
+        adminUser = userRepository.save(adminUser);
+
+        String accessToken = jwtUtil.generateAccessToken(adminUser.getMobileNumber(), adminUser.getRole().name());
+        String refreshToken = jwtUtil.generateRefreshToken(adminUser.getMobileNumber());
+
+        return AuthResponse.builder()
+                .accessToken(accessToken)
+                .refreshToken(refreshToken)
+                .user(UserResponse.builder()
+                        .id(adminUser.getId())
+                        .mobileNumber(adminUser.getMobileNumber())
+                        .fullName(adminUser.getFullName())
+                        .email(adminUser.getEmail())
+                        .role(adminUser.getRole())
+                        .isActive(adminUser.getIsActive())
+                        .build())
+                .build();
+    }
+
     public AuthResponse adminLogin(AdminLoginRequest request) {
         User admin = userRepository.findByMobileNumberAndRole(request.getUsername(), Role.ADMIN)
                 .orElseThrow(() -> new UnauthorizedException("Invalid credentials"));
@@ -156,6 +241,21 @@ public class AuthService {
                     .build();
         } catch (Exception e) {
             throw new UnauthorizedException("Invalid refresh token");
+        }
+    }
+    
+    @PreDestroy
+    public void cleanup() {
+        if (scheduler != null && !scheduler.isShutdown()) {
+            scheduler.shutdown();
+            try {
+                if (!scheduler.awaitTermination(5, TimeUnit.SECONDS)) {
+                    scheduler.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                scheduler.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
         }
     }
 }

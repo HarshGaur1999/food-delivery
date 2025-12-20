@@ -215,3 +215,7 @@ LEFT JOIN menu_items mi ON mc.id = mi.category_id
 GROUP BY mc.id, mc.name
 ORDER BY mc.display_order;
 
+
+
+
+

@@ -77,6 +77,13 @@ public class PaymentService {
                 payment.setStatus(PaymentStatus.COMPLETED);
                 payment.setPaidAt(LocalDateTime.now());
                 payment = paymentRepository.save(payment);
+
+                // Update order status to PLACED after successful payment
+                com.shivdhaba.food_delivery.domain.entity.Order order = payment.getOrder();
+                if (order.getStatus() == com.shivdhaba.food_delivery.domain.enums.OrderStatus.PENDING_PAYMENT) {
+                    order.setStatus(com.shivdhaba.food_delivery.domain.enums.OrderStatus.PLACED);
+                    orderRepository.save(order);
+                }
             } else {
                 payment.setStatus(PaymentStatus.FAILED);
                 payment.setFailureReason("Invalid signature");

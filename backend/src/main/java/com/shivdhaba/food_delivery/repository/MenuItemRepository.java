@@ -11,6 +11,7 @@ import java.util.List;
 @Repository
 public interface MenuItemRepository extends JpaRepository<MenuItem, Long> {
     List<MenuItem> findByCategoryAndStatus(MenuCategory category, ItemStatus status);
+    List<MenuItem> findByCategory(MenuCategory category);
     List<MenuItem> findByStatusOrderByDisplayOrderAsc(ItemStatus status);
     List<MenuItem> findByCategoryIsActiveTrueAndStatusOrderByDisplayOrderAsc(ItemStatus status);
 }

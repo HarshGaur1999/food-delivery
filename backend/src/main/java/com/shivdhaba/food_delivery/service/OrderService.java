@@ -102,7 +102,7 @@ public class OrderService {
         Order order = Order.builder()
                 .orderNumber(orderNumberGenerator.generateOrderNumber())
                 .customer(customer)
-                .status(OrderStatus.PLACED)
+                .status(request.getPaymentMethod() == com.shivdhaba.food_delivery.domain.enums.PaymentMethod.RAZORPAY ? OrderStatus.PENDING_PAYMENT : OrderStatus.PLACED)
                 .subtotal(subtotal)
                 .deliveryCharge(deliveryCharge)
                 .totalAmount(totalAmount)

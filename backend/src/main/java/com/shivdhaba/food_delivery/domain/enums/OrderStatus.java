@@ -1,6 +1,7 @@
 package com.shivdhaba.food_delivery.domain.enums;
 
 public enum OrderStatus {
+    PENDING_PAYMENT,
     PLACED,
     ACCEPTED,
     PREPARING,

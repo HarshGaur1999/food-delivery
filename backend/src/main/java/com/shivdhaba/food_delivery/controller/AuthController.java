@@ -2,6 +2,7 @@ package com.shivdhaba.food_delivery.controller;
 
 import com.shivdhaba.food_delivery.domain.enums.Role;
 import com.shivdhaba.food_delivery.dto.request.AdminLoginRequest;
+import com.shivdhaba.food_delivery.dto.request.AdminRegisterRequest;
 import com.shivdhaba.food_delivery.dto.request.OtpRequest;
 import com.shivdhaba.food_delivery.dto.request.OtpVerifyRequest;
 import com.shivdhaba.food_delivery.dto.response.ApiResponse;
@@ -56,6 +57,16 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.<AuthResponse>builder()
                 .success(true)
                 .message("Login successful")
+                .data(response)
+                .build());
+    }
+
+    @PostMapping("/admin/register")
+    public ResponseEntity<ApiResponse<AuthResponse>> adminRegister(@Valid @RequestBody AdminRegisterRequest request) {
+        AuthResponse response = authService.createAdminUser(request);
+        return ResponseEntity.status(201).body(ApiResponse.<AuthResponse>builder()
+                .success(true)
+                .message("Admin user registered successfully")
                 .data(response)
                 .build());
     }

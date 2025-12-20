@@ -9,14 +9,9 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.GenericToStringSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
-/**
- * Redis configuration.
- * Only loads when Redis is configured in application.properties.
- * If Redis is not configured, the application will use in-memory OTP storage.
- */
 @Configuration
 @EnableCaching
-@ConditionalOnProperty(name = "spring.data.redis.host")
+@ConditionalOnProperty(name = "spring.cache.type", havingValue = "redis", matchIfMissing = false)
 public class RedisConfig {
     
     @Bean

@@ -18,8 +18,14 @@ export const fetchMenu = createAsyncThunk(
       // Backend returns: { success: true, message: "...", data: [...] }
       // So response.data contains the actual menu categories array
       if (response && response.success && response.data) {
-        console.log('fetchMenu thunk: Menu data extracted successfully, categories count:', response.data.length);
-        return response.data;
+        // Ensure data is an array before accessing length
+        if (Array.isArray(response.data)) {
+          console.log('fetchMenu thunk: Menu data extracted successfully, categories count:', response.data.length);
+          return response.data;
+        } else {
+          console.warn('fetchMenu thunk: response.data is not an array:', typeof response.data);
+          return [];
+        }
       }
       // Fallback if structure is different
       if (response && Array.isArray(response)) {
@@ -50,11 +56,17 @@ const menuSlice = createSlice({
       })
       .addCase(fetchMenu.fulfilled, (state, action) => {
         state.isLoading = false;
+        state.error = null;
         // Ensure categories is always an array to prevent FlatList errors
         state.categories = Array.isArray(action.payload) ? action.payload : [];
-        // Flatten items from all categories
+        // Flatten items from all categories - safely handle null/undefined categories and items
         state.items = Array.isArray(action.payload) 
-          ? action.payload.flatMap(category => category.items || [])
+          ? action.payload.flatMap(category => {
+              if (category && Array.isArray(category.items)) {
+                return category.items;
+              }
+              return [];
+            })
           : [];
       })
       .addCase(fetchMenu.rejected, (state, action) => {

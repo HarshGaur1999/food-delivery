@@ -42,7 +42,7 @@ public class Order {
     private User deliveryBoy;
     
     @Enumerated(EnumType.STRING)
-    @Column(name = "status", nullable = false)
+    @Column(name = "status", nullable = false, length = 20)
     @Builder.Default
     private OrderStatus status = OrderStatus.PLACED;
     
@@ -57,7 +57,7 @@ public class Order {
     private BigDecimal totalAmount;
     
     @Enumerated(EnumType.STRING)
-    @Column(name = "payment_method", nullable = false)
+    @Column(name = "payment_method", nullable = false, length = 20)
     private PaymentMethod paymentMethod;
     
     @Column(name = "delivery_address", nullable = false, columnDefinition = "TEXT")

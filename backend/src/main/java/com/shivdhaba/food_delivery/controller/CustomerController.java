@@ -19,6 +19,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
 
 @RestController
 @RequestMapping("/api/v1/customer")
@@ -32,16 +34,32 @@ public class CustomerController {
     private final SecurityUtil securityUtil;
     
     @PostMapping("/orders")
-    public ResponseEntity<ApiResponse<OrderResponse>> placeOrder(
+    public ResponseEntity<ApiResponse<Map<String, Object>>> placeOrder(
             @Valid @RequestBody PlaceOrderRequest request,
             Authentication authentication) {
         Long customerId = securityUtil.getCurrentUserId(authentication);
         OrderResponse order = orderService.placeOrder(customerId, request);
-        return ResponseEntity.ok(ApiResponse.<OrderResponse>builder()
-                .success(true)
-                .message("Order placed successfully")
-                .data(order)
-                .build());
+
+        if (request.getPaymentMethod() == com.shivdhaba.food_delivery.domain.enums.PaymentMethod.RAZORPAY) {
+            Order orderEntity = orderService.getOrderEntity(order.getId());
+            String razorpayOrderId = paymentService.createRazorpayOrder(orderEntity);
+
+            Map<String, Object> responseData = new HashMap<>();
+            responseData.put("order", order);
+            responseData.put("razorpayOrderId", razorpayOrderId);
+
+            return ResponseEntity.ok(ApiResponse.<Map<String, Object>>builder()
+                    .success(true)
+                    .message("Order placed successfully, awaiting payment")
+                    .data(responseData)
+                    .build());
+        } else {
+            return ResponseEntity.ok(ApiResponse.<Map<String, Object>>builder()
+                    .success(true)
+                    .message("Order placed successfully")
+                    .data(Map.of("order", order))
+                    .build());
+        }
     }
     
     @GetMapping("/orders")
