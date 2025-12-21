@@ -81,6 +81,16 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
         versionName "1.0"
+        // Ensure NDK components are available
+        // Building only for x86_64 to avoid CMake issues with arm64-v8a
+        // For physical devices, install CMake via Android Studio and change back to all architectures
+        ndk {
+            abiFilters "x86_64"
+        }
+    }
+    packagingOptions {
+        pickFirst '**/libc++_shared.so'
+        pickFirst '**/libfbjni.so'
     }
     signingConfigs {
         debug {

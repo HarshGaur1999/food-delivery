@@ -4,12 +4,15 @@ buildscript {
         minSdkVersion = 21
         compileSdkVersion = 35          // Changed from 34 to 35
         targetSdkVersion = 34
-        ndkVersion = "26.1.10909125"
+        ndkVersion = "25.1.8937393"
         kotlinVersion = "1.9.0"         // Updated from 1.8.0 to 1.9.0
     }
     repositories {
         google()
         mavenCentral()
+        maven {
+            url "https://www.jitpack.io"
+        }
     }
     dependencies {
         classpath("com.android.tools.build:gradle:8.6.1")  // Added version 8.6.1

@@ -126,3 +126,11 @@ ipconfig | findstr "IPv4"
 
 
 
+
+
+
+
+
+
+
+
