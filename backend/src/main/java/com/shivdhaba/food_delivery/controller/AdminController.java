@@ -482,6 +482,7 @@ public class AdminController {
                 .name(request.getName())
                 .description(request.getDescription())
                 .price(request.getPrice())
+                .discountPrice(request.getDiscountPrice())
                 .imageUrl(request.getImageUrl())
                 .preparationTimeMinutes(request.getPreparationTimeMinutes())
                 .isVegetarian(request.getIsVegetarian() != null ? request.getIsVegetarian() : true)
@@ -513,6 +514,7 @@ public class AdminController {
         if (request.getName() != null) item.setName(request.getName());
         if (request.getDescription() != null) item.setDescription(request.getDescription());
         if (request.getPrice() != null) item.setPrice(request.getPrice());
+        if (request.getDiscountPrice() != null) item.setDiscountPrice(request.getDiscountPrice());
         if (request.getImageUrl() != null) item.setImageUrl(request.getImageUrl());
         if (request.getPreparationTimeMinutes() != null) item.setPreparationTimeMinutes(request.getPreparationTimeMinutes());
         if (request.getIsVegetarian() != null) item.setIsVegetarian(request.getIsVegetarian());

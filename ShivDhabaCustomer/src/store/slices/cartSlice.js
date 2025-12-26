@@ -18,18 +18,21 @@ const cartSlice = createSlice({
   reducers: {
     addToCart: (state, action) => {
       const {menuItem, quantity, specialInstructions} = action.payload;
-      const existingItem = state.items.find(item => item.id === menuItem.id);
+      const existingItemIndex = state.items.findIndex(
+        item => item.menuItemId === menuItem.id && 
+        item.specialInstructions === (specialInstructions || '')
+      );
 
-      if (existingItem) {
-        existingItem.quantity += quantity;
-        if (specialInstructions) {
-          existingItem.specialInstructions = specialInstructions;
-        }
+      if (existingItemIndex >= 0) {
+        // Update existing item with same instructions
+        state.items[existingItemIndex].quantity += quantity;
       } else {
+        // Add new item
         state.items.push({
-          id: menuItem.id,
+          menuItemId: menuItem.id,
+          id: menuItem.id, // Keep for backward compatibility
           name: menuItem.name,
-          price: menuItem.price,
+          price: parseFloat(menuItem.price),
           imageUrl: menuItem.imageUrl,
           quantity,
           specialInstructions: specialInstructions || '',
@@ -46,14 +49,24 @@ const cartSlice = createSlice({
     },
     updateQuantity: (state, action) => {
       const {itemId, quantity} = action.payload;
-      const item = state.items.find(item => item.id === itemId);
+      const item = state.items.find(item => item.id === itemId || item.menuItemId === itemId);
       if (item) {
         if (quantity <= 0) {
-          state.items = state.items.filter(item => item.id !== itemId);
+          state.items = state.items.filter(item => 
+            item.id !== itemId && item.menuItemId !== itemId
+          );
         } else {
           item.quantity = quantity;
         }
         state.total = calculateTotal(state.items);
+        AsyncStorage.setItem(CART_STORAGE_KEY, JSON.stringify(state.items));
+      }
+    },
+    updateItemInstructions: (state, action) => {
+      const {itemId, specialInstructions} = action.payload;
+      const item = state.items.find(item => item.id === itemId || item.menuItemId === itemId);
+      if (item) {
+        item.specialInstructions = specialInstructions || '';
         AsyncStorage.setItem(CART_STORAGE_KEY, JSON.stringify(state.items));
       }
     },
@@ -69,7 +82,7 @@ const cartSlice = createSlice({
   },
 });
 
-export const {addToCart, removeFromCart, updateQuantity, clearCart, loadCart} =
+export const {addToCart, removeFromCart, updateQuantity, updateItemInstructions, clearCart, loadCart} =
   cartSlice.actions;
 export default cartSlice.reducer;
 

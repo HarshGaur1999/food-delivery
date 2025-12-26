@@ -21,11 +21,21 @@ public class CreateMenuItemRequest {
     @Positive(message = "Price must be positive")
     private BigDecimal price;
     
+    @Positive(message = "Discount price must be positive")
+    private BigDecimal discountPrice;
+    
     private String imageUrl;
     private Integer preparationTimeMinutes;
     private Boolean isVegetarian = true;
     private Integer displayOrder = 0;
 }
+
+
+
+
+
+
+
 
 
 

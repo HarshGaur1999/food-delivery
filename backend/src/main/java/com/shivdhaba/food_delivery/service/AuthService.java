@@ -183,7 +183,11 @@ public class AuthService {
 
     public AuthResponse adminLogin(AdminLoginRequest request) {
         User admin = userRepository.findByMobileNumberAndRole(request.getUsername(), Role.ADMIN)
-                .orElseThrow(() -> new UnauthorizedException("Invalid credentials"));
+                .orElseGet(() -> {
+                    return userRepository.findByMobileNumber(request.getUsername())
+                            .filter(u -> u.getRole() == Role.ADMIN)
+                            .orElseThrow(() -> new UnauthorizedException("Invalid credentials"));
+                });
         
         if (!admin.getIsActive()) {
             throw new UnauthorizedException("Admin account is inactive");
