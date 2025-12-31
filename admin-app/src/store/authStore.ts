@@ -1,6 +1,10 @@
 import {create} from 'zustand';
 import {secureStorage} from '@services/secureStorage';
-import {authRepository, AuthResponse} from '@data/repositories/authRepository';
+import {
+  authRepository,
+  AuthResponse,
+  OtpResponse,
+} from '@data/repositories/authRepository';
 
 interface User {
   id: number;
@@ -16,10 +20,14 @@ interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
+  otpEmailOrPhone: string | null;
   login: (username: string, password: string) => Promise<void>;
+  sendAdminOtp: (emailOrPhone: string) => Promise<OtpResponse>;
+  verifyAdminOtp: (emailOrPhone: string, otp: string) => Promise<void>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
   clearError: () => void;
+  setOtpEmailOrPhone: (emailOrPhone: string | null) => void;
 }
 
 export const authStore = create<AuthState>((set, get) => ({
@@ -27,6 +35,7 @@ export const authStore = create<AuthState>((set, get) => ({
   isAuthenticated: false,
   isLoading: false,
   error: null,
+  otpEmailOrPhone: null,
 
   login: async (username: string, password: string) => {
     set({isLoading: true, error: null});
@@ -56,6 +65,72 @@ export const authStore = create<AuthState>((set, get) => ({
     }
   },
 
+  sendAdminOtp: async (emailOrPhone: string): Promise<OtpResponse> => {
+    set({isLoading: true, error: null});
+    try {
+      const response: OtpResponse = await authRepository.sendAdminOtp({
+        emailOrPhone: emailOrPhone.trim(),
+      });
+
+      set({
+        isLoading: false,
+        error: null,
+        otpEmailOrPhone: emailOrPhone.trim(),
+      });
+
+      return response;
+    } catch (error: any) {
+      const errorMessage =
+        error.response?.data?.message || error.message || 'Failed to send OTP';
+      set({
+        error: errorMessage,
+        isLoading: false,
+        otpEmailOrPhone: null,
+      });
+      throw error;
+    }
+  },
+
+  verifyAdminOtp: async (emailOrPhone: string, otp: string) => {
+    set({isLoading: true, error: null});
+    try {
+      const response: AuthResponse = await authRepository.verifyAdminOtp({
+        emailOrPhone: emailOrPhone.trim(),
+        otp: otp.trim(),
+      });
+
+      // Validate role is ADMIN
+      if (response.user.role !== 'ADMIN') {
+        throw new Error('Unauthorized: Invalid admin role');
+      }
+
+      await secureStorage.setAccessToken(response.accessToken);
+      await secureStorage.setRefreshToken(response.refreshToken);
+      await secureStorage.setUserProfile(response.user);
+
+      set({
+        user: response.user,
+        isAuthenticated: true,
+        isLoading: false,
+        error: null,
+        otpEmailOrPhone: null,
+      });
+    } catch (error: any) {
+      const errorMessage =
+        error.response?.data?.message || error.message || 'OTP verification failed';
+      set({
+        error: errorMessage,
+        isLoading: false,
+        isAuthenticated: false,
+      });
+      throw error;
+    }
+  },
+
+  setOtpEmailOrPhone: (emailOrPhone: string | null) => {
+    set({otpEmailOrPhone: emailOrPhone});
+  },
+
   logout: async () => {
     try {
       await secureStorage.clear();
@@ -76,6 +151,17 @@ export const authStore = create<AuthState>((set, get) => ({
       const profile = await secureStorage.getUserProfile();
 
       if (token && profile) {
+        // Validate role is ADMIN
+        if (profile.role !== 'ADMIN') {
+          await secureStorage.clear();
+          set({
+            user: null,
+            isAuthenticated: false,
+            isLoading: false,
+          });
+          return;
+        }
+
         set({
           user: profile,
           isAuthenticated: true,
@@ -88,7 +174,9 @@ export const authStore = create<AuthState>((set, get) => ({
         });
       }
     } catch (error) {
+      await secureStorage.clear();
       set({
+        user: null,
         isAuthenticated: false,
         isLoading: false,
       });
@@ -99,6 +187,7 @@ export const authStore = create<AuthState>((set, get) => ({
     set({error: null});
   },
 }));
+
 
 
 

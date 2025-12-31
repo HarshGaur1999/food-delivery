@@ -50,9 +50,23 @@ class ApiClient {
                 },
               );
 
-              const {accessToken, refreshToken: newRefreshToken} = response.data.data;
+              const {
+                accessToken,
+                refreshToken: newRefreshToken,
+                user,
+              } = response.data.data;
+
+              // Validate role is ADMIN
+              if (user && user.role !== 'ADMIN') {
+                await secureStorage.clear();
+                return Promise.reject(new Error('Unauthorized: Invalid admin role'));
+              }
+
               await secureStorage.setAccessToken(accessToken);
               await secureStorage.setRefreshToken(newRefreshToken);
+              if (user) {
+                await secureStorage.setUserProfile(user);
+              }
 
               originalRequest.headers.Authorization = `Bearer ${accessToken}`;
               return this.client(originalRequest);
@@ -74,6 +88,7 @@ class ApiClient {
 }
 
 export const apiClient = new ApiClient();
+
 
 
 

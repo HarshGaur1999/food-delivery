@@ -10,25 +10,46 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import {useNavigation} from '@react-navigation/native';
 import {authStore} from '@store/authStore';
+import {validateAdminCredential} from '@config/adminConstants';
 
 export const LoginScreen: React.FC = () => {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const login = authStore((state: any) => state.login);
+  const [emailOrPhone, setEmailOrPhone] = useState('');
+  const navigation = useNavigation<any>();
+  const sendAdminOtp = authStore((state: any) => state.sendAdminOtp);
   const isLoading = authStore((state: any) => state.isLoading);
   const error = authStore((state: any) => state.error);
+  const clearError = authStore((state: any) => state.clearError);
 
-  const handleLogin = async () => {
-    if (!username.trim() || !password.trim()) {
-      Alert.alert('Error', 'Please enter username and password');
+  React.useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      clearError();
+    });
+    return unsubscribe;
+  }, [navigation, clearError]);
+
+  const handleSendOtp = async () => {
+    const trimmed = emailOrPhone.trim();
+    
+    if (!trimmed) {
+      Alert.alert('Error', 'Please enter email or phone number');
+      return;
+    }
+
+    // Validate against hardcoded admin credentials
+    if (!validateAdminCredential(trimmed)) {
+      Alert.alert('Error', 'Unauthorized Admin');
       return;
     }
 
     try {
-      await login(username.trim(), password);
+      await sendAdminOtp(trimmed);
+      navigation.navigate('OtpVerification', {emailOrPhone: trimmed});
     } catch (err: any) {
-      Alert.alert('Login Failed', err.message || 'Invalid credentials');
+      const errorMessage =
+        err.response?.data?.message || err.message || 'Failed to send OTP';
+      Alert.alert('Error', errorMessage);
     }
   };
 
@@ -43,35 +64,26 @@ export const LoginScreen: React.FC = () => {
         <View style={styles.form}>
           <TextInput
             style={styles.input}
-            placeholder="Username"
-            value={username}
-            onChangeText={setUsername}
+            placeholder="Email or Phone Number"
+            value={emailOrPhone}
+            onChangeText={setEmailOrPhone}
             autoCapitalize="none"
             autoCorrect={false}
+            keyboardType="email-address"
             editable={!isLoading}
-          />
-
-          <TextInput
-            style={styles.input}
-            placeholder="Password"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            autoCapitalize="none"
-            autoCorrect={false}
-            editable={!isLoading}
+            placeholderTextColor="#999999"
           />
 
           {error && <Text style={styles.errorText}>{error}</Text>}
 
           <TouchableOpacity
             style={[styles.button, isLoading && styles.buttonDisabled]}
-            onPress={handleLogin}
+            onPress={handleSendOtp}
             disabled={isLoading}>
             {isLoading ? (
               <ActivityIndicator color="#FFFFFF" />
             ) : (
-              <Text style={styles.buttonText}>Login</Text>
+              <Text style={styles.buttonText}>Send OTP</Text>
             )}
           </TouchableOpacity>
         </View>
@@ -114,6 +126,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     borderWidth: 1,
     borderColor: '#E0E0E0',
+    color: '#000000',
   },
   button: {
     backgroundColor: '#FF6B35',
@@ -137,7 +150,3 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 });
-
-
-
-

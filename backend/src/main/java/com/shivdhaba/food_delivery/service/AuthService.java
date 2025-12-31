@@ -3,6 +3,8 @@ package com.shivdhaba.food_delivery.service;
 import com.shivdhaba.food_delivery.domain.entity.User;
 import com.shivdhaba.food_delivery.domain.enums.Role;
 import com.shivdhaba.food_delivery.dto.request.AdminLoginRequest;
+import com.shivdhaba.food_delivery.dto.request.AdminOtpRequest;
+import com.shivdhaba.food_delivery.dto.request.AdminOtpVerifyRequest;
 import com.shivdhaba.food_delivery.dto.request.AdminRegisterRequest;
 import com.shivdhaba.food_delivery.dto.request.OtpRequest;
 import com.shivdhaba.food_delivery.dto.request.OtpVerifyRequest;
@@ -177,6 +179,145 @@ public class AuthService {
                         .email(adminUser.getEmail())
                         .role(adminUser.getRole())
                         .isActive(adminUser.getIsActive())
+                        .build())
+                .build();
+    }
+
+    // Hardcoded admin credentials
+    private static final String ADMIN_EMAIL = "harshg101999@gmail.com";
+    private static final String ADMIN_PHONE = "9389110115";
+    
+    public OtpResponse sendAdminOtp(AdminOtpRequest request) {
+        String emailOrPhone = request.getEmailOrPhone().trim();
+        
+        // Validate against hardcoded admin credentials
+        boolean isValid = ADMIN_EMAIL.equalsIgnoreCase(emailOrPhone) 
+                || ADMIN_PHONE.equals(emailOrPhone);
+        
+        if (!isValid) {
+            throw new UnauthorizedException("Unauthorized Admin");
+        }
+        
+        // Determine if it's email or phone
+        boolean isEmail = emailOrPhone.contains("@");
+        String identifier = isEmail ? emailOrPhone : emailOrPhone;
+        String otpKey = "otp:admin:" + identifier;
+        String otp = otpUtil.generateOtp();
+        
+        // Use Redis if available, otherwise use in-memory storage
+        if (redisTemplate != null) {
+            redisTemplate.opsForValue().set(otpKey, otp, otpExpirationMinutes, TimeUnit.MINUTES);
+        } else {
+            long expirationTime = System.currentTimeMillis() + (otpExpirationMinutes * 60 * 1000L);
+            inMemoryOtpStore.put(otpKey, new OtpEntry(otp, expirationTime));
+            scheduler.schedule(() -> inMemoryOtpStore.remove(otpKey), otpExpirationMinutes, TimeUnit.MINUTES);
+        }
+        
+        // In production, send OTP via SMS or Email service
+        // For now, we'll log it (remove in production)
+        System.out.println("Admin OTP for " + identifier + ": " + otp);
+        
+        return OtpResponse.builder()
+                .message("OTP sent successfully")
+                .expiresInSeconds((long) (otpExpirationMinutes * 60))
+                .build();
+    }
+    
+    @Transactional
+    public AuthResponse verifyAdminOtp(AdminOtpVerifyRequest request) {
+        String emailOrPhone = request.getEmailOrPhone().trim();
+        String otp = request.getOtp();
+        
+        // Validate against hardcoded admin credentials
+        boolean isValid = ADMIN_EMAIL.equalsIgnoreCase(emailOrPhone) 
+                || ADMIN_PHONE.equals(emailOrPhone);
+        
+        if (!isValid) {
+            throw new UnauthorizedException("Unauthorized Admin");
+        }
+        
+        String identifier = emailOrPhone;
+        String otpKey = "otp:admin:" + identifier;
+        String storedOtp = null;
+        
+        // Get OTP from Redis or in-memory storage
+        if (redisTemplate != null) {
+            storedOtp = (String) redisTemplate.opsForValue().get(otpKey);
+            if (storedOtp != null) {
+                redisTemplate.delete(otpKey);
+            }
+        } else {
+            OtpEntry entry = inMemoryOtpStore.get(otpKey);
+            if (entry != null && !entry.isExpired()) {
+                storedOtp = entry.otp;
+                inMemoryOtpStore.remove(otpKey);
+            }
+        }
+        
+        if (storedOtp == null || !storedOtp.equals(otp)) {
+            throw new UnauthorizedException("Invalid or expired OTP");
+        }
+        
+        // Find or create admin user
+        boolean isEmail = emailOrPhone.contains("@");
+        User admin = null;
+        
+        if (isEmail) {
+            admin = userRepository.findByEmailAndRole(emailOrPhone, Role.ADMIN)
+                    .orElseGet(() -> {
+                        User newAdmin = User.builder()
+                                .email(emailOrPhone)
+                                .mobileNumber(ADMIN_PHONE) // Set phone for admin
+                                .role(Role.ADMIN)
+                                .isActive(true)
+                                .build();
+                        return userRepository.save(newAdmin);
+                    });
+        } else {
+            admin = userRepository.findByMobileNumberAndRole(emailOrPhone, Role.ADMIN)
+                    .orElseGet(() -> {
+                        User newAdmin = User.builder()
+                                .mobileNumber(emailOrPhone)
+                                .email(ADMIN_EMAIL) // Set email for admin
+                                .role(Role.ADMIN)
+                                .isActive(true)
+                                .build();
+                        return userRepository.save(newAdmin);
+                    });
+        }
+        
+        if (!admin.getIsActive()) {
+            throw new UnauthorizedException("Admin account is inactive");
+        }
+        
+        // Ensure both email and phone are set
+        boolean needsUpdate = false;
+        if (admin.getEmail() == null || !admin.getEmail().equals(ADMIN_EMAIL)) {
+            admin.setEmail(ADMIN_EMAIL);
+            needsUpdate = true;
+        }
+        if (admin.getMobileNumber() == null || !admin.getMobileNumber().equals(ADMIN_PHONE)) {
+            admin.setMobileNumber(ADMIN_PHONE);
+            needsUpdate = true;
+        }
+        if (needsUpdate) {
+            admin = userRepository.save(admin);
+        }
+        
+        // Generate tokens with ROLE_ADMIN
+        String accessToken = jwtUtil.generateAccessToken(admin.getMobileNumber(), admin.getRole().name());
+        String refreshToken = jwtUtil.generateRefreshToken(admin.getMobileNumber());
+        
+        return AuthResponse.builder()
+                .accessToken(accessToken)
+                .refreshToken(refreshToken)
+                .user(UserResponse.builder()
+                        .id(admin.getId())
+                        .mobileNumber(admin.getMobileNumber())
+                        .fullName(admin.getFullName())
+                        .email(admin.getEmail())
+                        .role(admin.getRole())
+                        .isActive(admin.getIsActive())
                         .build())
                 .build();
     }

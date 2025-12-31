@@ -6,6 +6,20 @@ export interface AdminLoginRequest {
   password: string;
 }
 
+export interface AdminOtpRequest {
+  emailOrPhone: string;
+}
+
+export interface AdminOtpVerifyRequest {
+  emailOrPhone: string;
+  otp: string;
+}
+
+export interface OtpResponse {
+  message: string;
+  expiresInSeconds: number;
+}
+
 export interface AuthResponse {
   accessToken: string;
   refreshToken: string;
@@ -33,7 +47,24 @@ export const authRepository = {
     );
     return response.data.data;
   },
+
+  async sendAdminOtp(request: AdminOtpRequest): Promise<OtpResponse> {
+    const response = await apiClient.instance.post<ApiResponse<OtpResponse>>(
+      ENDPOINTS.AUTH.ADMIN_OTP_SEND,
+      request,
+    );
+    return response.data.data;
+  },
+
+  async verifyAdminOtp(request: AdminOtpVerifyRequest): Promise<AuthResponse> {
+    const response = await apiClient.instance.post<ApiResponse<AuthResponse>>(
+      ENDPOINTS.AUTH.ADMIN_OTP_VERIFY,
+      request,
+    );
+    return response.data.data;
+  },
 };
+
 
 
 

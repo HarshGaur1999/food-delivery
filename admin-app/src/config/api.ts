@@ -8,6 +8,8 @@ export const API_CONFIG = {
 export const ENDPOINTS = {
   AUTH: {
     LOGIN: '/auth/admin/login',
+    ADMIN_OTP_SEND: '/auth/admin/otp/send',
+    ADMIN_OTP_VERIFY: '/auth/admin/otp/verify',
     REFRESH_TOKEN: '/auth/refresh',
   },
   ADMIN: {
@@ -28,6 +30,7 @@ export const ENDPOINTS = {
     TOGGLE_MENU_ITEM: (id: number) => `/admin/menu/items/${id}/toggle`,
   },
 };
+
 
 
 
