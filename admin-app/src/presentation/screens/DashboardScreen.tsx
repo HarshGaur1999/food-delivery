@@ -7,13 +7,15 @@ import {
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import {useNavigation} from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {dashboardStore} from '@store/dashboardStore';
 import {authStore} from '@store/authStore';
 
 export const DashboardScreen: React.FC = () => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const [period, setPeriod] = useState('today');
   const fetchStats = dashboardStore((state: any) => state.fetchStats);
   const stats = dashboardStore((state: any) => state.stats);
@@ -21,8 +23,43 @@ export const DashboardScreen: React.FC = () => {
   const logout = authStore((state: any) => state.logout);
 
   useEffect(() => {
-    fetchStats(period);
+    // Check token before making API calls
+    checkTokenAndFetchStats(period);
   }, [period, fetchStats]);
+
+  const checkTokenAndFetchStats = async (periodValue: string) => {
+    try {
+      // Check if token exists before making admin API calls
+      const token = await AsyncStorage.getItem('ADMIN_TOKEN');
+      
+      if (!token) {
+        console.error('❌ [DashboardScreen] No token found. Redirecting to login...');
+        Alert.alert(
+          'Authentication Required',
+          'Please login to access the dashboard',
+          [
+            {
+              text: 'OK',
+              onPress: async () => {
+                await authStore.getState().logout();
+                navigation.reset({
+                  index: 0,
+                  routes: [{name: 'Auth'}],
+                });
+              },
+            },
+          ],
+        );
+        return;
+      }
+
+      console.log('✅ [DashboardScreen] Token found, fetching stats...');
+      fetchStats(periodValue);
+    } catch (error) {
+      console.error('❌ [DashboardScreen] Error checking token:', error);
+      Alert.alert('Error', 'Failed to verify authentication');
+    }
+  };
 
   const handleLogout = async () => {
     await logout();
@@ -41,7 +78,7 @@ export const DashboardScreen: React.FC = () => {
       refreshControl={
         <RefreshControl
           refreshing={isLoading}
-          onRefresh={() => fetchStats(period)}
+          onRefresh={() => checkTokenAndFetchStats(period)}
         />
       }>
       <View style={styles.header}>
@@ -246,6 +283,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
+
+
 
 
 

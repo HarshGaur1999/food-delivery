@@ -40,17 +40,25 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             
             if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                 if (jwtUtil.validateToken(jwt, username)) {
+                    // Ensure role is properly formatted (ROLE_ADMIN, ROLE_CUSTOMER, etc.)
+                    String authority = role != null ? "ROLE_" + role.toUpperCase() : "ROLE_USER";
+                    
                     UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
                             username,
                             null,
-                            Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + role))
+                            Collections.singletonList(new SimpleGrantedAuthority(authority))
                     );
                     authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                     SecurityContextHolder.getContext().setAuthentication(authToken);
+                    
+                    logger.debug("JWT authentication successful for user: {} with role: {}", username, authority);
+                } else {
+                    logger.warn("JWT token validation failed for user: {}", username);
                 }
             }
         } catch (Exception e) {
-            logger.error("Cannot set user authentication: {}", e);
+            logger.error("Cannot set user authentication: {}", e.getMessage());
+            // Don't throw exception - let the request continue so Spring Security can handle it
         }
         
         filterChain.doFilter(request, response);

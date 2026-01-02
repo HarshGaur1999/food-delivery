@@ -10,9 +10,8 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import {useNavigation} from '@react-navigation/native';
+import {useNavigation, CommonActions} from '@react-navigation/native';
 import {authStore} from '@store/authStore';
-import {validateAdminCredential} from '@config/adminConstants';
 
 export const LoginScreen: React.FC = () => {
   const [emailOrPhone, setEmailOrPhone] = useState('');
@@ -31,25 +30,67 @@ export const LoginScreen: React.FC = () => {
 
   const handleSendOtp = async () => {
     const trimmed = emailOrPhone.trim();
+    console.log('🖥️ [LoginScreen] handleSendOtp() called with:', trimmed);
     
     if (!trimmed) {
+      console.warn('⚠️ [LoginScreen] Empty email/phone entered');
       Alert.alert('Error', 'Please enter email or phone number');
       return;
     }
 
-    // Validate against hardcoded admin credentials
-    if (!validateAdminCredential(trimmed)) {
-      Alert.alert('Error', 'Unauthorized Admin');
-      return;
-    }
-
+    // No password validation - OTP-only login
+    console.log('🖥️ [LoginScreen] Calling sendAdminOtp...');
     try {
       await sendAdminOtp(trimmed);
-      navigation.navigate('OtpVerification', {emailOrPhone: trimmed});
+      console.log('✅ [LoginScreen] sendAdminOtp succeeded');
+      
+      // CRITICAL: Navigate to OTP screen after successful OTP send
+      // Use setTimeout to ensure navigation happens after state updates
+      console.log('🚀 [LoginScreen] Preparing to navigate to AdminOtp screen with emailOrPhone:', trimmed);
+      
+      setTimeout(() => {
+        try {
+          console.log('🚀 [LoginScreen] Executing navigation...');
+          (navigation as any).navigate('AdminOtp', {emailOrPhone: trimmed});
+          console.log('✅ [LoginScreen] Navigation executed successfully');
+        } catch (navError: any) {
+          console.error('❌ [LoginScreen] Navigation error:', navError);
+          // Try alternative navigation method
+          try {
+            const navigateAction = CommonActions.navigate({
+              name: 'AdminOtp',
+              params: {emailOrPhone: trimmed},
+            });
+            navigation.dispatch(navigateAction);
+            console.log('✅ [LoginScreen] Navigation dispatched via CommonActions');
+          } catch (dispatchError: any) {
+            console.error('❌ [LoginScreen] Both navigation methods failed:', dispatchError);
+            Alert.alert('Error', 'Failed to navigate. Please try again.');
+          }
+        }
+      }, 100);
     } catch (err: any) {
+      console.error('❌ [LoginScreen] sendAdminOtp failed:', err);
+      console.error('❌ [LoginScreen] Error details:', {
+        message: err.message,
+        code: err.code,
+        response: err.response?.data,
+        status: err.response?.status,
+        statusText: err.response?.statusText,
+        request: err.request,
+      });
+      
       const errorMessage =
         err.response?.data?.message || err.message || 'Failed to send OTP';
-      Alert.alert('Error', errorMessage);
+      
+      // More detailed error message for network errors
+      let displayMessage = errorMessage;
+      if (err.code === 'ERR_NETWORK' || err.message?.includes('Network Error')) {
+        displayMessage = `Network Error: ${errorMessage}\n\nPlease check:\n- Backend is running\n- Correct IP address\n- Same WiFi network`;
+      }
+      
+      console.error('❌ [LoginScreen] Showing alert with message:', displayMessage);
+      Alert.alert('Error', displayMessage);
     }
   };
 

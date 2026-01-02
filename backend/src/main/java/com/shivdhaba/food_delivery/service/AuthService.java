@@ -12,6 +12,7 @@ import com.shivdhaba.food_delivery.dto.response.AuthResponse;
 import com.shivdhaba.food_delivery.dto.response.OtpResponse;
 import com.shivdhaba.food_delivery.dto.response.UserResponse;
 import com.shivdhaba.food_delivery.exception.UnauthorizedException;
+import com.shivdhaba.food_delivery.exception.ForbiddenException;
 import com.shivdhaba.food_delivery.repository.UserRepository;
 import com.shivdhaba.food_delivery.util.JwtUtil;
 import com.shivdhaba.food_delivery.util.OtpUtil;
@@ -49,18 +50,29 @@ public class AuthService {
     @Value("${otp.expiration-minutes}")
     private int otpExpirationMinutes;
     
-    // Inner class for OTP storage with expiration
+    // Inner class for OTP storage with expiration and attempts tracking
     private static class OtpEntry {
         final String otp;
         final long expirationTime;
+        int attempts;
+        final int maxAttempts = 3;
         
         OtpEntry(String otp, long expirationTime) {
             this.otp = otp;
             this.expirationTime = expirationTime;
+            this.attempts = 0;
         }
         
         boolean isExpired() {
             return System.currentTimeMillis() > expirationTime;
+        }
+        
+        boolean isMaxAttemptsReached() {
+            return attempts >= maxAttempts;
+        }
+        
+        void incrementAttempts() {
+            this.attempts++;
         }
     }
     
@@ -190,36 +202,41 @@ public class AuthService {
     public OtpResponse sendAdminOtp(AdminOtpRequest request) {
         String emailOrPhone = request.getEmailOrPhone().trim();
         
-        // Validate against hardcoded admin credentials
+        // STRICT VALIDATION: Only hard-coded admin credentials allowed
         boolean isValid = ADMIN_EMAIL.equalsIgnoreCase(emailOrPhone) 
                 || ADMIN_PHONE.equals(emailOrPhone);
         
+        // Return 403 Forbidden for non-admin attempts (as per requirements)
         if (!isValid) {
-            throw new UnauthorizedException("Unauthorized Admin");
+            throw new ForbiddenException("Not an Admin");
         }
         
-        // Determine if it's email or phone
-        boolean isEmail = emailOrPhone.contains("@");
-        String identifier = isEmail ? emailOrPhone : emailOrPhone;
+        String identifier = emailOrPhone;
         String otpKey = "otp:admin:" + identifier;
         String otp = otpUtil.generateOtp();
         
+        // OTP expiry: 5 minutes (300 seconds)
+        int otpExpiryMinutes = 5;
+        long expirationTime = System.currentTimeMillis() + (otpExpiryMinutes * 60 * 1000L);
+        
         // Use Redis if available, otherwise use in-memory storage
         if (redisTemplate != null) {
-            redisTemplate.opsForValue().set(otpKey, otp, otpExpirationMinutes, TimeUnit.MINUTES);
+            redisTemplate.opsForValue().set(otpKey, otp, otpExpiryMinutes, TimeUnit.MINUTES);
         } else {
-            long expirationTime = System.currentTimeMillis() + (otpExpirationMinutes * 60 * 1000L);
             inMemoryOtpStore.put(otpKey, new OtpEntry(otp, expirationTime));
-            scheduler.schedule(() -> inMemoryOtpStore.remove(otpKey), otpExpirationMinutes, TimeUnit.MINUTES);
+            scheduler.schedule(() -> inMemoryOtpStore.remove(otpKey), otpExpiryMinutes, TimeUnit.MINUTES);
         }
         
-        // In production, send OTP via SMS or Email service
-        // For now, we'll log it (remove in production)
-        System.out.println("Admin OTP for " + identifier + ": " + otp);
+        // Log OTP to console (NO SMS/Email integration as per requirements)
+        System.out.println("========================================");
+        System.out.println("ADMIN OTP for " + identifier + ": " + otp);
+        System.out.println("Expires in: " + otpExpiryMinutes + " minutes");
+        System.out.println("Max attempts: 3");
+        System.out.println("========================================");
         
         return OtpResponse.builder()
                 .message("OTP sent successfully")
-                .expiresInSeconds((long) (otpExpirationMinutes * 60))
+                .expiresInSeconds((long) (otpExpiryMinutes * 60))
                 .build();
     }
     
@@ -228,34 +245,66 @@ public class AuthService {
         String emailOrPhone = request.getEmailOrPhone().trim();
         String otp = request.getOtp();
         
-        // Validate against hardcoded admin credentials
+        // STRICT VALIDATION: Only hard-coded admin credentials allowed
         boolean isValid = ADMIN_EMAIL.equalsIgnoreCase(emailOrPhone) 
                 || ADMIN_PHONE.equals(emailOrPhone);
         
+        // Return 403 Forbidden for non-admin attempts
         if (!isValid) {
-            throw new UnauthorizedException("Unauthorized Admin");
+            throw new ForbiddenException("Not an Admin");
         }
         
         String identifier = emailOrPhone;
         String otpKey = "otp:admin:" + identifier;
+        OtpEntry entry = null;
         String storedOtp = null;
         
         // Get OTP from Redis or in-memory storage
         if (redisTemplate != null) {
             storedOtp = (String) redisTemplate.opsForValue().get(otpKey);
-            if (storedOtp != null) {
-                redisTemplate.delete(otpKey);
-            }
         } else {
-            OtpEntry entry = inMemoryOtpStore.get(otpKey);
-            if (entry != null && !entry.isExpired()) {
+            entry = inMemoryOtpStore.get(otpKey);
+            if (entry != null) {
+                // Check if expired
+                if (entry.isExpired()) {
+                    inMemoryOtpStore.remove(otpKey);
+                    throw new UnauthorizedException("OTP has expired");
+                }
+                // Check if max attempts reached
+                if (entry.isMaxAttemptsReached()) {
+                    inMemoryOtpStore.remove(otpKey);
+                    throw new UnauthorizedException("Maximum OTP attempts exceeded. Please request a new OTP");
+                }
                 storedOtp = entry.otp;
-                inMemoryOtpStore.remove(otpKey);
             }
         }
         
-        if (storedOtp == null || !storedOtp.equals(otp)) {
+        // Validate OTP
+        if (storedOtp == null) {
             throw new UnauthorizedException("Invalid or expired OTP");
+        }
+        
+        if (!storedOtp.equals(otp)) {
+            // Increment attempts for in-memory storage
+            if (entry != null) {
+                entry.incrementAttempts();
+                int remainingAttempts = entry.maxAttempts - entry.attempts;
+                if (entry.isMaxAttemptsReached()) {
+                    inMemoryOtpStore.remove(otpKey);
+                    throw new UnauthorizedException("Maximum OTP attempts exceeded. Please request a new OTP");
+                }
+                throw new UnauthorizedException("Invalid OTP. " + remainingAttempts + " attempt(s) remaining");
+            } else {
+                // For Redis, we'd need to track attempts separately
+                throw new UnauthorizedException("Invalid OTP");
+            }
+        }
+        
+        // OTP is valid - invalidate it
+        if (redisTemplate != null) {
+            redisTemplate.delete(otpKey);
+        } else {
+            inMemoryOtpStore.remove(otpKey);
         }
         
         // Find or create admin user
@@ -304,9 +353,9 @@ public class AuthService {
             admin = userRepository.save(admin);
         }
         
-        // Generate tokens with ROLE_ADMIN
-        String accessToken = jwtUtil.generateAccessToken(admin.getMobileNumber(), admin.getRole().name());
-        String refreshToken = jwtUtil.generateRefreshToken(admin.getMobileNumber());
+        // Generate tokens with ROLE_ADMIN (ensure role is ADMIN)
+        String accessToken = jwtUtil.generateAccessToken(admin.getEmail() != null ? admin.getEmail() : admin.getMobileNumber(), "ADMIN");
+        String refreshToken = jwtUtil.generateRefreshToken(admin.getEmail() != null ? admin.getEmail() : admin.getMobileNumber());
         
         return AuthResponse.builder()
                 .accessToken(accessToken)

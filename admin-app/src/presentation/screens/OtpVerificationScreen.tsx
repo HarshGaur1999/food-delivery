@@ -11,39 +11,26 @@ import {
   Platform,
 } from 'react-native';
 import {useRoute, useNavigation} from '@react-navigation/native';
-import {authStore} from '@store/authStore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import {authRepository, AuthResponse} from '@data/repositories/authRepository';
 
 export const OtpVerificationScreen: React.FC = () => {
   const route = useRoute();
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [isResendLoading, setIsResendLoading] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const inputRefs = useRef<(TextInput | null)[]>([]);
-  
-  const otpEmailOrPhone = authStore((state: any) => state.otpEmailOrPhone);
-  const verifyAdminOtp = authStore((state: any) => state.verifyAdminOtp);
-  const sendAdminOtp = authStore((state: any) => state.sendAdminOtp);
-  const isLoading = authStore((state: any) => state.isLoading);
-  const error = authStore((state: any) => state.error);
-  const clearError = authStore((state: any) => state.clearError);
-  const isAuthenticated = authStore((state: any) => state.isAuthenticated);
 
-  const emailOrPhone =
-    (route.params as any)?.emailOrPhone || otpEmailOrPhone || '';
+  const emailOrPhone = (route.params as any)?.emailOrPhone || '';
 
   useEffect(() => {
-    if (isAuthenticated) {
-      // Navigation will be handled automatically by AppNavigator
-      // based on auth state, no need to manually navigate
+    if (!emailOrPhone) {
+      Alert.alert('Error', 'Email or phone number is missing');
+      navigation.goBack();
     }
-  }, [isAuthenticated]);
-
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', () => {
-      clearError();
-    });
-    return unsubscribe;
-  }, [navigation, clearError]);
+  }, [emailOrPhone, navigation]);
 
   useEffect(() => {
     // Focus first input on mount
@@ -109,18 +96,63 @@ export const OtpVerificationScreen: React.FC = () => {
       return;
     }
 
+    setIsVerifying(true);
+    setError(null);
+
     try {
-      await verifyAdminOtp(emailOrPhone, otpString);
-      // Navigation handled by AppNavigator based on auth state
+      console.log('🔐 [OtpVerificationScreen] Verifying OTP...');
+      
+      // Call API to verify OTP
+      const response: AuthResponse = await authRepository.verifyAdminOtp({
+        emailOrPhone: emailOrPhone.trim(),
+        otp: otpString.trim(),
+      });
+
+      console.log('✅ [OtpVerificationScreen] OTP verified successfully');
+      console.log('🔑 [OtpVerificationScreen] Token received:', response.accessToken.substring(0, 20) + '...');
+
+      // Validate role is ADMIN
+      if (response.user.role !== 'ADMIN') {
+        throw new Error('Unauthorized: Invalid admin role');
+      }
+
+      // CRITICAL: Save token to ADMIN_TOKEN key with await
+      console.log('💾 [OtpVerificationScreen] Saving token to ADMIN_TOKEN...');
+      await AsyncStorage.setItem('ADMIN_TOKEN', response.accessToken);
+      
+      // Verify token was saved
+      const savedToken = await AsyncStorage.getItem('ADMIN_TOKEN');
+      if (!savedToken) {
+        throw new Error('Failed to save token. Please try again.');
+      }
+
+      console.log('✅ [OtpVerificationScreen] Admin token saved successfully');
+      console.log('✅ [OtpVerificationScreen] Token length:', savedToken.length);
+
+      // Save refresh token and user profile
+      await AsyncStorage.setItem('@admin_refresh_token', response.refreshToken);
+      await AsyncStorage.setItem('@admin_user_profile', JSON.stringify(response.user));
+
+      // Only navigate AFTER token is saved
+      console.log('🚀 [OtpVerificationScreen] Navigating to Dashboard...');
+      navigation.reset({
+        index: 0,
+        routes: [{name: 'Main'}],
+      });
     } catch (err: any) {
+      console.error('❌ [OtpVerificationScreen] OTP verification failed:', err);
       const errorMessage =
         err.response?.data?.message || err.message || 'OTP verification failed';
+      setError(errorMessage);
       Alert.alert('Error', errorMessage);
+      
       // Clear OTP on error
       setOtp(['', '', '', '', '', '']);
       if (inputRefs.current[0]) {
         inputRefs.current[0].focus();
       }
+    } finally {
+      setIsVerifying(false);
     }
   };
 
@@ -132,7 +164,9 @@ export const OtpVerificationScreen: React.FC = () => {
 
     setIsResendLoading(true);
     try {
-      await sendAdminOtp(emailOrPhone);
+      await authRepository.sendAdminOtp({
+        emailOrPhone: emailOrPhone.trim(),
+      });
       Alert.alert('Success', 'OTP resent successfully');
       setOtp(['', '', '', '', '', '']);
       if (inputRefs.current[0]) {
@@ -177,7 +211,7 @@ export const OtpVerificationScreen: React.FC = () => {
               keyboardType="number-pad"
               maxLength={1}
               selectTextOnFocus
-              editable={!isLoading}
+              editable={!isVerifying}
             />
           ))}
         </View>
@@ -185,20 +219,20 @@ export const OtpVerificationScreen: React.FC = () => {
         {error && <Text style={styles.errorText}>{error}</Text>}
 
         <TouchableOpacity
-          style={[styles.button, isLoading && styles.buttonDisabled]}
+          style={[styles.button, (isVerifying || otp.join('').length !== 6) && styles.buttonDisabled]}
           onPress={handleVerify}
-          disabled={isLoading || otp.join('').length !== 6}>
-          {isLoading ? (
+          disabled={isVerifying || otp.join('').length !== 6}>
+          {isVerifying ? (
             <ActivityIndicator color="#FFFFFF" />
           ) : (
-            <Text style={styles.buttonText}>Verify OTP</Text>
+            <Text style={styles.buttonText}>Verify & Login</Text>
           )}
         </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.resendButton}
           onPress={handleResendOtp}
-          disabled={isResendLoading || isLoading}>
+          disabled={isResendLoading || isVerifying}>
           {isResendLoading ? (
             <ActivityIndicator color="#FF6B35" />
           ) : (

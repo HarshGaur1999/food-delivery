@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const TOKEN_KEY = '@admin_access_token';
+// Using ADMIN_TOKEN as per requirements
+const TOKEN_KEY = 'ADMIN_TOKEN';
 const REFRESH_TOKEN_KEY = '@admin_refresh_token';
 const USER_PROFILE_KEY = '@admin_user_profile';
 
@@ -34,6 +35,8 @@ export const secureStorage = {
     await AsyncStorage.multiRemove([TOKEN_KEY, REFRESH_TOKEN_KEY, USER_PROFILE_KEY]);
   },
 };
+
+
 
 
 

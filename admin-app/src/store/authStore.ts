@@ -66,12 +66,14 @@ export const authStore = create<AuthState>((set, get) => ({
   },
 
   sendAdminOtp: async (emailOrPhone: string): Promise<OtpResponse> => {
+    console.log('📱 [AuthStore] sendAdminOtp() called with:', emailOrPhone);
     set({isLoading: true, error: null});
     try {
       const response: OtpResponse = await authRepository.sendAdminOtp({
         emailOrPhone: emailOrPhone.trim(),
       });
 
+      console.log('✅ [AuthStore] sendAdminOtp() success');
       set({
         isLoading: false,
         error: null,
@@ -80,8 +82,19 @@ export const authStore = create<AuthState>((set, get) => ({
 
       return response;
     } catch (error: any) {
+      console.error('❌ [AuthStore] sendAdminOtp() error:', error);
+      console.error('❌ [AuthStore] Error details:', {
+        message: error.message,
+        code: error.code,
+        response: error.response?.data,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+      });
+      
       const errorMessage =
         error.response?.data?.message || error.message || 'Failed to send OTP';
+      console.error('❌ [AuthStore] Setting error message:', errorMessage);
+      
       set({
         error: errorMessage,
         isLoading: false,

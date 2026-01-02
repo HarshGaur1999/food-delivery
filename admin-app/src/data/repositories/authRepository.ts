@@ -41,27 +41,58 @@ export interface ApiResponse<T> {
 
 export const authRepository = {
   async login(request: AdminLoginRequest): Promise<AuthResponse> {
-    const response = await apiClient.instance.post<ApiResponse<AuthResponse>>(
-      ENDPOINTS.AUTH.LOGIN,
-      request,
-    );
-    return response.data.data;
+    console.log('🔐 [AuthRepository] login() called');
+    console.log('🔐 [AuthRepository] Request:', JSON.stringify(request, null, 2));
+    console.log('🔐 [AuthRepository] Endpoint:', ENDPOINTS.AUTH.LOGIN);
+    try {
+      const response = await apiClient.instance.post<ApiResponse<AuthResponse>>(
+        ENDPOINTS.AUTH.LOGIN,
+        request,
+      );
+      console.log('✅ [AuthRepository] login() success');
+      return response.data.data;
+    } catch (error: any) {
+      console.error('❌ [AuthRepository] login() failed:', error);
+      throw error;
+    }
   },
 
   async sendAdminOtp(request: AdminOtpRequest): Promise<OtpResponse> {
-    const response = await apiClient.instance.post<ApiResponse<OtpResponse>>(
-      ENDPOINTS.AUTH.ADMIN_OTP_SEND,
-      request,
-    );
-    return response.data.data;
+    console.log('🔐 [AuthRepository] sendAdminOtp() called');
+    console.log('🔐 [AuthRepository] Request:', JSON.stringify(request, null, 2));
+    console.log('🔐 [AuthRepository] Endpoint:', ENDPOINTS.AUTH.ADMIN_OTP_SEND);
+    try {
+      const response = await apiClient.instance.post<ApiResponse<OtpResponse>>(
+        ENDPOINTS.AUTH.ADMIN_OTP_SEND,
+        request,
+      );
+      console.log('✅ [AuthRepository] sendAdminOtp() success');
+      console.log('✅ [AuthRepository] Response:', JSON.stringify(response.data, null, 2));
+      return response.data.data;
+    } catch (error: any) {
+      console.error('❌ [AuthRepository] sendAdminOtp() failed:', error);
+      throw error;
+    }
   },
 
   async verifyAdminOtp(request: AdminOtpVerifyRequest): Promise<AuthResponse> {
-    const response = await apiClient.instance.post<ApiResponse<AuthResponse>>(
-      ENDPOINTS.AUTH.ADMIN_OTP_VERIFY,
-      request,
-    );
-    return response.data.data;
+    console.log('🔐 [AuthRepository] verifyAdminOtp() called');
+    console.log('🔐 [AuthRepository] Request (OTP masked):', {
+      ...request,
+      otp: '***',
+    });
+    console.log('🔐 [AuthRepository] Endpoint:', ENDPOINTS.AUTH.ADMIN_OTP_VERIFY);
+    try {
+      const response = await apiClient.instance.post<ApiResponse<AuthResponse>>(
+        ENDPOINTS.AUTH.ADMIN_OTP_VERIFY,
+        request,
+      );
+      console.log('✅ [AuthRepository] verifyAdminOtp() success');
+      return response.data.data;
+    } catch (error: any) {
+      console.error('❌ [AuthRepository] verifyAdminOtp() failed:', error);
+      throw error;
+    }
   },
 };
 

@@ -1,13 +1,16 @@
 package com.shivdhaba.food_delivery.exception;
 
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.FieldError;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -88,6 +91,18 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(error, HttpStatus.UNAUTHORIZED);
     }
     
+    @ExceptionHandler(ForbiddenException.class)
+    public ResponseEntity<ErrorResponse> handleForbiddenException(ForbiddenException ex) {
+        ErrorResponse error = ErrorResponse.builder()
+                .timestamp(LocalDateTime.now())
+                .status(HttpStatus.FORBIDDEN.value())
+                .error("Forbidden")
+                .message(ex.getMessage())
+                .path("")
+                .build();
+        return new ResponseEntity<>(error, HttpStatus.FORBIDDEN);
+    }
+    
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, Object>> handleValidationExceptions(MethodArgumentNotValidException ex) {
         Map<String, String> errors = new HashMap<>();
@@ -104,6 +119,44 @@ public class GlobalExceptionHandler {
         response.put("errors", errors);
         
         return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
+    }
+    
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ErrorResponse> handleMethodNotSupportedException(
+            HttpRequestMethodNotSupportedException ex, HttpServletRequest request) {
+        String supportedMethods = String.join(", ", ex.getSupportedMethods());
+        ErrorResponse error = ErrorResponse.builder()
+                .timestamp(LocalDateTime.now())
+                .status(HttpStatus.METHOD_NOT_ALLOWED.value())
+                .error("Method Not Allowed")
+                .message(String.format("Method '%s' is not supported for this endpoint. Supported methods: %s", 
+                        ex.getMethod(), supportedMethods))
+                .path(request.getRequestURI())
+                .build();
+        return new ResponseEntity<>(error, HttpStatus.METHOD_NOT_ALLOWED);
+    }
+    
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ErrorResponse> handleNoResourceFoundException(
+            NoResourceFoundException ex, HttpServletRequest request) {
+        String path = request.getRequestURI();
+        String message;
+        
+        // If it's an API path, provide a more helpful error message
+        if (path.startsWith("/api/")) {
+            message = String.format("API endpoint not found: %s. Please check the endpoint URL and HTTP method.", path);
+        } else {
+            message = String.format("Resource not found: %s", path);
+        }
+        
+        ErrorResponse error = ErrorResponse.builder()
+                .timestamp(LocalDateTime.now())
+                .status(HttpStatus.NOT_FOUND.value())
+                .error("Not Found")
+                .message(message)
+                .path(path)
+                .build();
+        return new ResponseEntity<>(error, HttpStatus.NOT_FOUND);
     }
     
     @ExceptionHandler(Exception.class)

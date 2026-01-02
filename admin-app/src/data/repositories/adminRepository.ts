@@ -274,7 +274,27 @@ export const adminRepository = {
     );
     return response.data.data;
   },
+
+  async getDeliveryLocation(orderId: number): Promise<{
+    latitude: number;
+    longitude: number;
+    timestamp: string;
+    deliveryAddress: string;
+    deliveryLatitude: number;
+    deliveryLongitude: number;
+    deliveryBoy: {
+      id: number;
+      name: string;
+      mobile: string;
+    };
+  }> {
+    const response = await apiClient.instance.get<ApiResponse<any>>(
+      ENDPOINTS.ADMIN.DELIVERY_LOCATION(orderId),
+    );
+    return response.data.data;
+  },
 };
+
 
 
 

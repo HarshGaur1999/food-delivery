@@ -6,6 +6,7 @@ import com.shivdhaba.food_delivery.domain.enums.OrderStatus;
 import com.shivdhaba.food_delivery.domain.enums.PaymentMethod;
 import com.shivdhaba.food_delivery.domain.enums.PaymentStatus;
 import com.shivdhaba.food_delivery.domain.enums.Role;
+import com.shivdhaba.food_delivery.repository.DeliveryTrackingRepository;
 import com.shivdhaba.food_delivery.dto.request.*;
 import com.shivdhaba.food_delivery.dto.response.ApiResponse;
 import com.shivdhaba.food_delivery.dto.response.OrderResponse;
@@ -45,6 +46,7 @@ public class AdminController {
     private final NotificationService notificationService;
     private final PasswordEncoder passwordEncoder;
     private final PaymentRepository paymentRepository;
+    private final DeliveryTrackingRepository deliveryTrackingRepository;
     
     // Dashboard
     @GetMapping("/dashboard/stats")
@@ -209,12 +211,81 @@ public class AdminController {
     
     @PostMapping("/orders/{orderId}/accept")
     public ResponseEntity<ApiResponse<OrderResponse>> acceptOrder(@PathVariable Long orderId) {
-        OrderResponse order = orderService.updateOrderStatus(orderId, OrderStatus.ACCEPTED);
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found"));
+        
+        if (order.getStatus() != OrderStatus.PLACED && order.getStatus() != OrderStatus.PENDING_PAYMENT) {
+            throw new BadRequestException("Order cannot be accepted in current status");
+        }
+        
+        // Update status to ACCEPTED
+        OrderResponse orderResponse = orderService.updateOrderStatus(orderId, OrderStatus.ACCEPTED);
+        
+        // Auto-assign delivery boy if available
+        try {
+            List<DeliveryBoyDetails> availableBoys = deliveryBoyDetailsRepository
+                    .findByIsAvailableTrueAndIsOnDutyTrue();
+            
+            if (!availableBoys.isEmpty()) {
+                // Find nearest delivery boy if location available, otherwise use first available
+                DeliveryBoyDetails selectedBoy = null;
+                Order orderEntity = orderRepository.findById(orderId).orElse(null);
+                
+                if (orderEntity != null && orderEntity.getDeliveryLatitude() != null 
+                        && orderEntity.getDeliveryLongitude() != null) {
+                    // Find nearest delivery boy
+                    double minDistance = Double.MAX_VALUE;
+                    for (DeliveryBoyDetails boy : availableBoys) {
+                        if (boy.getCurrentLatitude() != null && boy.getCurrentLongitude() != null) {
+                            double distance = calculateDistance(
+                                    boy.getCurrentLatitude(),
+                                    boy.getCurrentLongitude(),
+                                    orderEntity.getDeliveryLatitude(),
+                                    orderEntity.getDeliveryLongitude()
+                            );
+                            if (distance < minDistance) {
+                                minDistance = distance;
+                                selectedBoy = boy;
+                            }
+                        }
+                    }
+                }
+                
+                // Fallback to first available if no location-based selection
+                if (selectedBoy == null) {
+                    selectedBoy = availableBoys.get(0);
+                }
+                
+                // Auto-assign delivery boy to order
+                // Note: Delivery boy will be notified when order status changes to READY
+                orderEntity.setDeliveryBoy(selectedBoy.getUser());
+                orderRepository.save(orderEntity);
+                
+                // Mark delivery boy as unavailable (will be set back to available when order is delivered)
+                selectedBoy.setIsAvailable(false);
+                deliveryBoyDetailsRepository.save(selectedBoy);
+            }
+        } catch (Exception e) {
+            // Log error but don't fail the accept operation
+            // Auto-assignment is best-effort
+        }
+        
         return ResponseEntity.ok(ApiResponse.<OrderResponse>builder()
                 .success(true)
                 .message("Order accepted successfully")
-                .data(order)
+                .data(orderResponse)
                 .build());
+    }
+    
+    private double calculateDistance(double lat1, double lon1, double lat2, double lon2) {
+        final int R = 6371; // Radius of the earth in km
+        double latDistance = Math.toRadians(lat2 - lat1);
+        double lonDistance = Math.toRadians(lon2 - lon1);
+        double a = Math.sin(latDistance / 2) * Math.sin(latDistance / 2)
+                + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
+                * Math.sin(lonDistance / 2) * Math.sin(lonDistance / 2);
+        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
     }
     
     @PostMapping("/orders/{orderId}/reject")
@@ -594,6 +665,62 @@ public class AdminController {
                 .success(true)
                 .message("Config updated successfully")
                 .data(config)
+                .build());
+    }
+    
+    // Delivery Location Tracking
+    @GetMapping("/orders/{orderId}/delivery-location")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getDeliveryLocation(
+            @PathVariable Long orderId) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found"));
+        
+        if (order.getDeliveryBoy() == null) {
+            throw new BadRequestException("No delivery boy assigned to this order");
+        }
+        
+        DeliveryBoyDetails deliveryBoyDetails = deliveryBoyDetailsRepository
+                .findByUser(order.getDeliveryBoy())
+                .orElseThrow(() -> new ResourceNotFoundException("Delivery boy details not found"));
+        
+        // Get latest tracking entry
+        List<DeliveryTracking> trackingHistory = deliveryTrackingRepository
+                .findByOrderOrderByCreatedAtDesc(order);
+        
+        Map<String, Object> locationData = new HashMap<>();
+        
+        // Current location from delivery boy details (most recent)
+        if (deliveryBoyDetails.getCurrentLatitude() != null 
+                && deliveryBoyDetails.getCurrentLongitude() != null) {
+            locationData.put("latitude", deliveryBoyDetails.getCurrentLatitude());
+            locationData.put("longitude", deliveryBoyDetails.getCurrentLongitude());
+            locationData.put("timestamp", deliveryBoyDetails.getUpdatedAt());
+        } else if (!trackingHistory.isEmpty()) {
+            // Fallback to latest tracking entry
+            DeliveryTracking latest = trackingHistory.get(0);
+            locationData.put("latitude", latest.getLatitude());
+            locationData.put("longitude", latest.getLongitude());
+            locationData.put("timestamp", latest.getCreatedAt());
+        } else {
+            throw new ResourceNotFoundException("No location data available for this delivery");
+        }
+        
+        // Delivery address
+        locationData.put("deliveryAddress", order.getDeliveryAddress());
+        locationData.put("deliveryLatitude", order.getDeliveryLatitude());
+        locationData.put("deliveryLongitude", order.getDeliveryLongitude());
+        
+        // Delivery boy info
+        Map<String, Object> deliveryBoyInfo = new HashMap<>();
+        deliveryBoyInfo.put("id", order.getDeliveryBoy().getId());
+        deliveryBoyInfo.put("name", order.getDeliveryBoy().getFullName());
+        deliveryBoyInfo.put("mobile", order.getDeliveryBoy().getMobileNumber());
+        locationData.put("deliveryBoy", deliveryBoyInfo);
+        
+        return ResponseEntity.ok(ApiResponse.<Map<String, Object>>builder()
+                .success(true)
+                .message("Delivery location retrieved successfully")
+                .data(locationData)
                 .build());
     }
 
