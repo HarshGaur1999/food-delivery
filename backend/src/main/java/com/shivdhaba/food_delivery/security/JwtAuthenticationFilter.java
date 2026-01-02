@@ -51,13 +51,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                     SecurityContextHolder.getContext().setAuthentication(authToken);
                     
-                    logger.debug("JWT authentication successful for user: {} with role: {}", username, authority);
+                    logger.debug("JWT authentication successful for user: " + username + " with role: " + authority);
                 } else {
-                    logger.warn("JWT token validation failed for user: {}", username);
+                    logger.warn("JWT token validation failed for user: " + username);
                 }
             }
         } catch (Exception e) {
-            logger.error("Cannot set user authentication: {}", e.getMessage());
+            logger.error("Cannot set user authentication: " + e.getMessage(), e);
             // Don't throw exception - let the request continue so Spring Security can handle it
         }
         

@@ -307,51 +307,26 @@ public class AuthService {
             inMemoryOtpStore.remove(otpKey);
         }
         
-        // Find or create admin user
+        // ✅ FIX: Find existing admin user ONLY - NO registration
+        // Admins are pre-created in database, never auto-registered
         boolean isEmail = emailOrPhone.contains("@");
         User admin = null;
         
         if (isEmail) {
             admin = userRepository.findByEmailAndRole(emailOrPhone, Role.ADMIN)
-                    .orElseGet(() -> {
-                        User newAdmin = User.builder()
-                                .email(emailOrPhone)
-                                .mobileNumber(ADMIN_PHONE) // Set phone for admin
-                                .role(Role.ADMIN)
-                                .isActive(true)
-                                .build();
-                        return userRepository.save(newAdmin);
-                    });
+                    .orElseThrow(() -> new UnauthorizedException("Admin account not found. Please contact system administrator."));
         } else {
             admin = userRepository.findByMobileNumberAndRole(emailOrPhone, Role.ADMIN)
-                    .orElseGet(() -> {
-                        User newAdmin = User.builder()
-                                .mobileNumber(emailOrPhone)
-                                .email(ADMIN_EMAIL) // Set email for admin
-                                .role(Role.ADMIN)
-                                .isActive(true)
-                                .build();
-                        return userRepository.save(newAdmin);
-                    });
+                    .orElseThrow(() -> new UnauthorizedException("Admin account not found. Please contact system administrator."));
         }
         
+        // Validate admin account is active
         if (!admin.getIsActive()) {
-            throw new UnauthorizedException("Admin account is inactive");
+            throw new UnauthorizedException("Admin account is inactive. Please contact system administrator.");
         }
         
-        // Ensure both email and phone are set
-        boolean needsUpdate = false;
-        if (admin.getEmail() == null || !admin.getEmail().equals(ADMIN_EMAIL)) {
-            admin.setEmail(ADMIN_EMAIL);
-            needsUpdate = true;
-        }
-        if (admin.getMobileNumber() == null || !admin.getMobileNumber().equals(ADMIN_PHONE)) {
-            admin.setMobileNumber(ADMIN_PHONE);
-            needsUpdate = true;
-        }
-        if (needsUpdate) {
-            admin = userRepository.save(admin);
-        }
+        // ✅ FIX: No user updates during login - admins are pre-configured
+        // Removed update logic - admins should be properly configured in database
         
         // Generate tokens with ROLE_ADMIN (ensure role is ADMIN)
         String accessToken = jwtUtil.generateAccessToken(admin.getEmail() != null ? admin.getEmail() : admin.getMobileNumber(), "ADMIN");

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, {useState, useEffect} from 'react';
 import {NavigationContainer} from '@react-navigation/native';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import {AuthNavigator} from './AuthNavigator';
@@ -10,9 +10,29 @@ const Stack = createNativeStackNavigator();
 
 export const AppNavigator: React.FC = () => {
   const isAuthenticated = authStore((state: any) => state.isAuthenticated);
-  const isLoading = authStore((state: any) => state.isLoading);
+  // ✅ FIX: Only check isLoading on initial mount, not on every state change
+  // This prevents AppNavigator from re-rendering during OTP flow
+  const [initialLoading, setInitialLoading] = useState(true);
 
-  if (isLoading) {
+  useEffect(() => {
+    // Check initial loading state once
+    const checkInitialAuth = () => {
+      const currentState = authStore.getState();
+      // Only show loading if app is starting AND checking auth
+      // Don't show loading during OTP flow (when otpEmailOrPhone is set)
+      if (!currentState.isLoading || currentState.otpEmailOrPhone) {
+        setInitialLoading(false);
+      } else {
+        // Wait a bit for initial auth check
+        setTimeout(() => {
+          setInitialLoading(false);
+        }, 500);
+      }
+    };
+    checkInitialAuth();
+  }, []);
+
+  if (initialLoading) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#FF6B35" />

@@ -91,18 +91,6 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(error, HttpStatus.UNAUTHORIZED);
     }
     
-    @ExceptionHandler(ForbiddenException.class)
-    public ResponseEntity<ErrorResponse> handleForbiddenException(ForbiddenException ex) {
-        ErrorResponse error = ErrorResponse.builder()
-                .timestamp(LocalDateTime.now())
-                .status(HttpStatus.FORBIDDEN.value())
-                .error("Forbidden")
-                .message(ex.getMessage())
-                .path("")
-                .build();
-        return new ResponseEntity<>(error, HttpStatus.FORBIDDEN);
-    }
-    
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, Object>> handleValidationExceptions(MethodArgumentNotValidException ex) {
         Map<String, String> errors = new HashMap<>();
@@ -157,6 +145,42 @@ public class GlobalExceptionHandler {
                 .path(path)
                 .build();
         return new ResponseEntity<>(error, HttpStatus.NOT_FOUND);
+    }
+    
+    @ExceptionHandler(org.springframework.dao.DataIntegrityViolationException.class)
+    public ResponseEntity<ErrorResponse> handleDataIntegrityViolationException(
+            org.springframework.dao.DataIntegrityViolationException ex) {
+        String message = ex.getMessage();
+        
+        // Check for duplicate entry errors
+        if (message != null && message.contains("Duplicate entry")) {
+            if (message.contains("mobile_number")) {
+                message = "User with this mobile number already exists";
+            } else if (message.contains("email")) {
+                message = "User with this email already exists";
+            } else {
+                message = "Duplicate entry violation. Resource already exists.";
+            }
+            // Return 409 Conflict for duplicate entries
+            ErrorResponse error = ErrorResponse.builder()
+                    .timestamp(LocalDateTime.now())
+                    .status(HttpStatus.CONFLICT.value())
+                    .error("Conflict")
+                    .message(message)
+                    .path("")
+                    .build();
+            return new ResponseEntity<>(error, HttpStatus.CONFLICT);
+        }
+        
+        // For other data integrity violations, return 400 Bad Request
+        ErrorResponse error = ErrorResponse.builder()
+                .timestamp(LocalDateTime.now())
+                .status(HttpStatus.BAD_REQUEST.value())
+                .error("Bad Request")
+                .message("Data integrity violation: " + (message != null ? message : "Invalid data provided"))
+                .path("")
+                .build();
+        return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
     }
     
     @ExceptionHandler(Exception.class)

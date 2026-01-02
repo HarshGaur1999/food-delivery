@@ -31,7 +31,13 @@ const App: React.FC = () => {
     console.log('🔧 [App] For physical devices, ensure BASE_URL matches your computer IP');
     
     // Check authentication status (does not call admin APIs)
-    checkAuth();
+    // Only check if not in OTP flow (to prevent interference)
+    const currentState = authStore.getState();
+    if (!currentState.otpEmailOrPhone) {
+      checkAuth();
+    } else {
+      console.log('⚠️ [App] Skipping checkAuth - OTP flow in progress');
+    }
 
     // Setup notification listener
     // Note: For full FCM integration, you need to:

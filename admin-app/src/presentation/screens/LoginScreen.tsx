@@ -44,31 +44,53 @@ export const LoginScreen: React.FC = () => {
       await sendAdminOtp(trimmed);
       console.log('✅ [LoginScreen] sendAdminOtp succeeded');
       
-      // CRITICAL: Navigate to OTP screen after successful OTP send
-      // Use setTimeout to ensure navigation happens after state updates
-      console.log('🚀 [LoginScreen] Preparing to navigate to AdminOtp screen with emailOrPhone:', trimmed);
+      // CRITICAL FIX: Navigate to OTP screen IMMEDIATELY after OTP send success
+      console.log('🚀 [LoginScreen] ========== NAVIGATION START ==========');
+      console.log('🚀 [LoginScreen] Email/Phone:', trimmed);
+      console.log('🚀 [LoginScreen] Navigation object exists:', !!navigation);
+      console.log('🚀 [LoginScreen] Navigation type:', typeof navigation);
       
-      setTimeout(() => {
+      // Method 1: Try push() first (most reliable for stack navigation)
+      if ((navigation as any).push) {
         try {
-          console.log('🚀 [LoginScreen] Executing navigation...');
-          (navigation as any).navigate('AdminOtp', {emailOrPhone: trimmed});
-          console.log('✅ [LoginScreen] Navigation executed successfully');
-        } catch (navError: any) {
-          console.error('❌ [LoginScreen] Navigation error:', navError);
-          // Try alternative navigation method
-          try {
-            const navigateAction = CommonActions.navigate({
-              name: 'AdminOtp',
-              params: {emailOrPhone: trimmed},
-            });
-            navigation.dispatch(navigateAction);
-            console.log('✅ [LoginScreen] Navigation dispatched via CommonActions');
-          } catch (dispatchError: any) {
-            console.error('❌ [LoginScreen] Both navigation methods failed:', dispatchError);
-            Alert.alert('Error', 'Failed to navigate. Please try again.');
-          }
+          console.log('🚀 [LoginScreen] Attempting navigation.push()...');
+          (navigation as any).push('AdminOtp', {emailOrPhone: trimmed});
+          console.log('✅ [LoginScreen] navigation.push() SUCCESS');
+          return; // Exit early if push succeeds
+        } catch (pushError: any) {
+          console.error('❌ [LoginScreen] push() failed:', pushError.message);
         }
-      }, 100);
+      }
+      
+      // Method 2: Try navigate() as fallback
+      if (navigation.navigate) {
+        try {
+          console.log('🚀 [LoginScreen] Attempting navigation.navigate()...');
+          navigation.navigate('AdminOtp', {emailOrPhone: trimmed});
+          console.log('✅ [LoginScreen] navigation.navigate() SUCCESS');
+          return; // Exit early if navigate succeeds
+        } catch (navError: any) {
+          console.error('❌ [LoginScreen] navigate() failed:', navError.message);
+        }
+      }
+      
+      // Method 3: Try CommonActions as last resort
+      try {
+        console.log('🚀 [LoginScreen] Attempting CommonActions.navigate()...');
+        const navigateAction = CommonActions.navigate({
+          name: 'AdminOtp',
+          params: {emailOrPhone: trimmed},
+        });
+        navigation.dispatch(navigateAction);
+        console.log('✅ [LoginScreen] CommonActions.navigate() SUCCESS');
+      } catch (dispatchError: any) {
+        console.error('❌ [LoginScreen] ========== ALL NAVIGATION METHODS FAILED ==========');
+        console.error('❌ [LoginScreen] Error:', dispatchError);
+        Alert.alert(
+          'Navigation Error',
+          'Failed to navigate to OTP screen.\n\nPlease check console logs and try again.',
+        );
+      }
     } catch (err: any) {
       console.error('❌ [LoginScreen] sendAdminOtp failed:', err);
       console.error('❌ [LoginScreen] Error details:', {
